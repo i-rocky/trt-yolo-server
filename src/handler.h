@@ -13,7 +13,7 @@ class Handler {
     std::vector<std::string> mime_types_ = {"image/jpg", "image/jpeg", "image/png", "image/webp"};
 
     static void split_url(const std::string &url, std::string &host, std::string &path);
-    void apply_blur(cv::Mat &image) const;
+    bool apply_blur(cv::Mat &image) const;
 
     static httplib::Server::Handler handleOptionsRequest();
     static std::string base64_decode(const std::string &base64);
@@ -21,7 +21,7 @@ class Handler {
     bool handles(const std::string &content_type) const;
     httplib::Server::Handler handleImageDlRequest() const;
     httplib::Server::Handler handleImageRequest() const;
-    void processImage(cv::Mat &image, httplib::Response &res) const;
+    bool processImage(cv::Mat &image) const;
     static httplib::Server::Handler handleCors();
     static httplib::Server::ExceptionHandler handleException();
 

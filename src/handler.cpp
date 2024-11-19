@@ -83,8 +83,7 @@ httplib::Server::Handler Handler::handleImageDlRequest() const {
         auto result = client.Get(path);
 
         std::cout << "Status: " << result->status << " Content-Type: " << result->get_header_value("Content-Type") << std::endl;
-        bool should_handle = handles(result->get_header_value("Content-Type"));
-        if (!should_handle)
+        if (!handles(result->get_header_value("Content-Type")))
         {
             res.set_content(result->body, result->get_header_value("Content-Type"));
             return;
@@ -94,8 +93,16 @@ httplib::Server::Handler Handler::handleImageDlRequest() const {
 
         const std::vector<uchar> image_data(result->body.begin(), result->body.end());
         cv::Mat image = cv::imdecode(image_data, cv::IMREAD_COLOR);
+        cv::imwrite("image.jpg", image);
 
-        processImage(image, res);
+        if (processImage(image)) {
+            std::vector<uchar> output_image_data;
+            cv::imencode(".png", image, output_image_data);
+            const std::string response = {output_image_data.begin(), output_image_data.end()};
+            res.set_content(response, "image/png");
+            return;
+        }
+        res.set_content(result->body, result->get_header_value("Content-Type"));
     };
 }
 
@@ -103,45 +110,47 @@ httplib::Server::Handler Handler::handleImageRequest() const {
     return [&](const httplib::Request &req, httplib::Response &res) {
         const std::string base64 = req.body;
         std::string decoded = base64_decode(base64);
-        std::vector<uchar> image_data(decoded.begin(), decoded.end());
+        const std::vector<uchar> image_data(decoded.begin(), decoded.end());
 
         cv::Mat image = cv::imdecode(image_data, cv::IMREAD_COLOR);
 
-        processImage(image, res);
+        processImage(image);
+        std::vector<uchar> output_image_data;
+        cv::imencode(".png", image, output_image_data);
+        const std::string response = {output_image_data.begin(), output_image_data.end()};
+        res.set_content(response, "image/png");
     };
 }
 
-void Handler::processImage(cv::Mat &image, httplib::Response &res) const {
-    auto startTime = std::chrono::steady_clock::now();
+bool Handler::processImage(cv::Mat &image) const {
+    const auto startTime = std::chrono::steady_clock::now();
     if (image.empty()) {
         std::cerr << "ERROR: image is empty" << std::endl;
-        res.set_content("ERROR: image is empty", "text/plain");
-        return;
+        return false;
     }
 
     if (image.rows < 15 || image.cols < 15) {
         std::cerr << "ERROR: image is too small" << std::endl;
-        res.set_content("ERROR: image is too small", "text/plain");
-        return;
+        return false;
     }
 
-    apply_blur(image);
+    const auto applied = apply_blur(image);
 
-    std::vector<uchar> image_data;
-    cv::imencode(".jpg", image, image_data);
-    const std::string response = {image_data.begin(), image_data.end()};
-    res.set_content(response, "image/jpeg");
     // end time
-    auto endTime = std::chrono::steady_clock::now();
-    std::chrono::duration<double> elapsedSeconds = endTime - startTime;
+    const auto endTime = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> elapsedSeconds = endTime - startTime;
     std::cout << "Time taken: " << elapsedSeconds.count() << " seconds" << std::endl;
+
+    return applied;
 }
 
-void Handler::apply_blur(cv::Mat &image) const {
+bool Handler::apply_blur(cv::Mat &image) const {
     mutex_->lock();
     const auto objects = yoloV8_->detectObjects(image);
-    yoloV8_->drawObjectLabels(image, objects);
+    const auto masked = YoloV8::drawObjectLabels(image, objects);
     mutex_->unlock();
+
+    return masked;
 }
 
 httplib::Server::ExceptionHandler Handler::handleException() {

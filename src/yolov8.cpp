@@ -399,87 +399,35 @@ std::vector<Object> YoloV8::postprocessDetect(std::vector<float> &featureVector)
     return objects;
 }
 
-void YoloV8::drawObjectLabels(cv::Mat &image, const std::vector<Object> &objects, unsigned int scale) {
+bool YoloV8::drawObjectLabels(cv::Mat &image, const std::vector<Object> &objects, unsigned int scale) {
     // If segmentation information is present, start with that
     if (!objects.empty() && !objects[0].boxMask.empty()) {
         const cv::Mat mask = cv::Mat::zeros(image.size(), image.type());
+        bool masked = false;
         for (const auto &object : objects) {
             if (object.label != 0) {
                 continue;
+            }
+            if (!masked) {
+                masked = true;
             }
             auto color = cv::Scalar(255, 255, 255);
 
             // Add the mask for said object
             mask(object.rect).setTo(color, object.boxMask);
         }
+
+        if (!masked) {
+            return false;
+        }
         // Add all the masks to our image
         // cv::addWeighted(image, 0.5, mask, 0.8, 1, image);
         cv::Mat roi;
         cv::GaussianBlur(image & mask, roi, cv::Size(0, 0), 51, 51);
         image = (image & (~mask)) + roi;
+
+        return true;
     }
-/*
-    // Bounding boxes and annotations
-    for (auto &object : objects) {
-        // Choose the color
-        int colorIndex = object.label % COLOR_LIST.size(); // We have only defined 80 unique colors
-        cv::Scalar color = cv::Scalar(COLOR_LIST[colorIndex][0], COLOR_LIST[colorIndex][1], COLOR_LIST[colorIndex][2]);
-        float meanColor = cv::mean(color)[0];
-        cv::Scalar txtColor;
-        if (meanColor > 0.5) {
-            txtColor = cv::Scalar(0, 0, 0);
-        } else {
-            txtColor = cv::Scalar(255, 255, 255);
-        }
 
-        const auto &rect = object.rect;
-
-        // Draw rectangles and text
-        char text[256];
-        sprintf(text, "%s %.1f%%", CLASS_NAMES[object.label].c_str(), object.probability * 100);
-
-        int baseLine = 0;
-        cv::Size labelSize = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.35 * scale, scale, &baseLine);
-
-        cv::Scalar txt_bk_color = color * 0.7 * 255;
-
-        int x = object.rect.x;
-        int y = object.rect.y + 1;
-
-        cv::rectangle(image, rect, color * 255, scale + 1);
-
-        cv::rectangle(image, cv::Rect(cv::Point(x, y), cv::Size(labelSize.width, labelSize.height + baseLine)), txt_bk_color, -1);
-
-        cv::putText(image, text, cv::Point(x, y + labelSize.height), cv::FONT_HERSHEY_SIMPLEX, 0.35 * scale, txtColor, scale);
-
-        // Pose estimation
-        if (!object.kps.empty()) {
-            auto &kps = object.kps;
-            for (int k = 0; k < NUM_KPS + 2; k++) {
-                if (k < NUM_KPS) {
-                    int kpsX = std::round(kps[k * 3]);
-                    int kpsY = std::round(kps[k * 3 + 1]);
-                    float kpsS = kps[k * 3 + 2];
-                    if (kpsS > KPS_THRESHOLD) {
-                        cv::Scalar kpsColor = cv::Scalar(KPS_COLORS[k][0], KPS_COLORS[k][1], KPS_COLORS[k][2]);
-                        cv::circle(image, {kpsX, kpsY}, 5, kpsColor, -1);
-                    }
-                }
-                auto &ske = SKELETON[k];
-                int pos1X = std::round(kps[(ske[0] - 1) * 3]);
-                int pos1Y = std::round(kps[(ske[0] - 1) * 3 + 1]);
-
-                int pos2X = std::round(kps[(ske[1] - 1) * 3]);
-                int pos2Y = std::round(kps[(ske[1] - 1) * 3 + 1]);
-
-                float pos1S = kps[(ske[0] - 1) * 3 + 2];
-                float pos2S = kps[(ske[1] - 1) * 3 + 2];
-
-                if (pos1S > KPS_THRESHOLD && pos2S > KPS_THRESHOLD) {
-                    cv::Scalar limbColor = cv::Scalar(LIMB_COLORS[k][0], LIMB_COLORS[k][1], LIMB_COLORS[k][2]);
-                    cv::line(image, {pos1X, pos1Y}, {pos2X, pos2Y}, limbColor, 2);
-                }
-            }
-        }
-    }*/
+    return false;
 }
